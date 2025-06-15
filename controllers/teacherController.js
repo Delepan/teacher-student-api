@@ -93,3 +93,21 @@ exports.getCommonStudents = async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 };
+
+exports.toSuspend = async (req, res) => {
+  try {
+    const { student } = req.body;
+    const studentDetail = await Student.findOne({
+      where: { email: student },
+    });
+    if (!studentDetail) {
+      return res.status(404).json({ error: "Student not able to find" });
+    }
+    studentDetail.is_suspended = true;
+    await studentDetail.save();
+    console.log("Student suspended:", studentDetail.email);
+    return res.sendStatus(204);
+  } catch (error) {
+    return res.status(500).json({ error: `Internel server error ${error}` });
+  }
+};
