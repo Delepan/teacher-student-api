@@ -111,3 +111,36 @@ exports.toSuspend = async (req, res) => {
     return res.status(500).json({ error: `Internel server error ${error}` });
   }
 };
+
+exports.retriveForNotifications = async (req, res) => {
+  try {
+    const { teacher, notification } = req.body;
+    if (!teacher || !notification) {
+      return res.status(400).json({ error: "Teacher detail is required" });
+    }
+    const findTeacher = await Teacher.findOne({ where: { email: teacher } });
+    if (!findTeacher) {
+      return res.status(404).json({ error: "Teacher not found!" });
+    }
+
+    const registeredStudents = await findTeacher.getStudents({
+      where: { is_suspended: false },
+    });
+    const registeredEmails = registeredStudents.map((reg) => reg.email);
+    const studentListMentioned =
+      notification
+        .match(/@([\w.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)/g)
+        ?.map((n) => n.slice(1)) || [];
+
+    const validMentionList = await Student.findAll({
+      where: { email: studentListMentioned, is_suspended: false },
+    });
+    const validEmailList = validMentionList.map((list) => list.email);
+    const allRecipients = Array.from(
+      new Set([...registeredEmails, ...validEmailList])
+    );
+    return res.status(200).json({ recipients: allRecipients });
+  } catch (error) {
+    return res.status(500).json({ error: `Internel server error ${error}` });
+  }
+};
