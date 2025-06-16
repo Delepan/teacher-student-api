@@ -12,7 +12,11 @@ app.get("/", (req, res) => {
   res.send("Teacher Student API running!!!");
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running at ${PORT}`);
-});
+if (process.env.NODE_ENV !== "test") {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Server running at ${PORT}`);
+  });
+}
+
+module.exports = app;

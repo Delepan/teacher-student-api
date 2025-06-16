@@ -1,146 +1,112 @@
-const Teacher = require("../models/teacher");
-const Student = require("../models/student");
+const { Teacher, Student } = require("../models");
 
+// Register students to a teacher
 exports.registerStudents = async (req, res) => {
   try {
     const { teacher, students } = req.body;
     if (!teacher || !Array.isArray(students) || students.length === 0) {
-      return res.status(400).json("Teacher or Student details are required!");
+      return res
+        .status(400)
+        .json({ error: "Teacher and students are required." });
     }
-
-    let teacherStatus = "existed";
-    let studentNewlyCreated = [];
-    let studentExisted = [];
-
-    const [teacherValue, teacherCreated] = await Teacher.findOrCreate({
+    const [teacherValue] = await Teacher.findOrCreate({
       where: { email: teacher },
     });
-    if (teacherCreated) teacherStatus = "created";
     const studentList = [];
     for (const email of students) {
-      const [studentValue, studentCreated] = await Student.findOrCreate({
-        where: { email: email },
-      });
+      const [studentValue] = await Student.findOrCreate({ where: { email } });
       studentList.push(studentValue);
-
-      if (studentCreated) {
-        studentNewlyCreated.push(email);
-      } else {
-        studentExisted.push(email);
-      }
     }
     await teacherValue.addStudents(studentList);
-    return res.status(204);
-    // res.status(200).json({
-    //   teacher: {
-    //     email: teacher,
-    //     status: teacherStatus,
-    //   },
-    //   students: {
-    //     added: studentNewlyCreated,
-    //     alreadyExist: studentExisted,
-    //   },
-    // });
+    return res.sendStatus(204);
   } catch (error) {
-    console.error("Error in registration", error);
-    res.status(500).json({ error: "Internel server error" });
+    return res.status(500).json({ error: "Internal server error" });
   }
 };
 
+// Get common students for one or more teachers
 exports.getCommonStudents = async (req, res) => {
   try {
     let { teacher } = req.query;
     if (!teacher) {
       return res
         .status(400)
-        .json({ error: "At least one teacher is required!" });
+        .json({ error: "At least one teacher is required." });
     }
-
-    if (!Array.isArray(teacher)) {
-      teacher = [teacher];
-    }
-
+    if (!Array.isArray(teacher)) teacher = [teacher];
     const teacherList = await Teacher.findAll({ where: { email: teacher } });
-
     if (teacherList.length !== teacher.length) {
-      return res.status(404).json({ error: "teacher not found!" });
+      return res.status(404).json({ error: "One or more teachers not found." });
     }
-
-    const studentList = await Promise.all(
+    const studentLists = await Promise.all(
       teacherList.map((t) => t.getStudents({ where: { is_suspended: false } }))
     );
-
-    const studentEmails = studentList.map((list) =>
-      list.map((student) => student.email)
-    );
-
-    let commonStudentList = studentEmails[0] || [];
+    const studentEmails = studentLists.map((list) => list.map((s) => s.email));
+    let commonStudents = studentEmails[0] || [];
     for (let i = 1; i < studentEmails.length; i++) {
-      commonStudentList = commonStudentList.filter((email) =>
+      commonStudents = commonStudents.filter((email) =>
         studentEmails[i].includes(email)
       );
     }
-
-    if (commonStudentList.length === 0) {
-      return res
-        .status(200)
-        .json({ students: [], message: "There is no common students!" });
-    }
-
-    return res.status(200).json({ students: commonStudentList });
+    return res.status(200).json({ students: commonStudents });
   } catch (error) {
-    console.error("Error in getCommonStudents", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 };
 
+// Suspend a student
 exports.toSuspend = async (req, res) => {
   try {
     const { student } = req.body;
-    const studentDetail = await Student.findOne({
-      where: { email: student },
-    });
+    const studentDetail = await Student.findOne({ where: { email: student } });
     if (!studentDetail) {
-      return res.status(404).json({ error: "Student not able to find" });
+      return res.status(404).json({ error: "Student not found." });
     }
     studentDetail.is_suspended = true;
     await studentDetail.save();
-    console.log("Student suspended:", studentDetail.email);
     return res.sendStatus(204);
   } catch (error) {
-    return res.status(500).json({ error: `Internel server error ${error}` });
+    return res.status(500).json({ error: "Internal server error" });
   }
 };
 
+// Retrieve students eligible for notification
 exports.retriveForNotifications = async (req, res) => {
   try {
     const { teacher, notification } = req.body;
     if (!teacher || !notification) {
-      return res.status(400).json({ error: "Teacher detail is required" });
+      return res
+        .status(400)
+        .json({ error: "Teacher and notification are required." });
     }
-    const findTeacher = await Teacher.findOne({ where: { email: teacher } });
-    if (!findTeacher) {
-      return res.status(404).json({ error: "Teacher not found!" });
+    const teacherRecord = await Teacher.findOne({ where: { email: teacher } });
+
+    if (!teacherRecord) {
+      return res.status(404).json({ error: "Teacher not found." });
     }
 
-    const registeredStudents = await findTeacher.getStudents({
+    // Students registered under the teacher (not suspended)
+    const registeredStudents = await teacherRecord.getStudents({
       where: { is_suspended: false },
     });
-    const registeredEmails = registeredStudents.map((reg) => reg.email);
-    const studentListMentioned =
+    const registeredEmails = registeredStudents.map((s) => s.email);
+
+    // Students mentioned in the notification (not suspended)
+    const mentionedEmails =
       notification
         .match(/@([\w.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)/g)
         ?.map((n) => n.slice(1)) || [];
-
-    const validMentionList = await Student.findAll({
-      where: { email: studentListMentioned, is_suspended: false },
+    const mentionedStudents = await Student.findAll({
+      where: { email: mentionedEmails, is_suspended: false },
     });
-    const validEmailList = validMentionList.map((list) => list.email);
-    const allRecipients = Array.from(
-      new Set([...registeredEmails, ...validEmailList])
+    const mentionedValidEmails = mentionedStudents.map((s) => s.email);
+
+    // Combine and deduplicate
+    const recipients = Array.from(
+      new Set([...registeredEmails, ...mentionedValidEmails])
     );
-    return res.status(200).json({ recipients: allRecipients });
+    return res.status(200).json({ recipients });
   } catch (error) {
-    return res.status(500).json({ error: `Internel server error ${error}` });
+    return res.status(500).json({ error: "Internal server error" });
   }
 };

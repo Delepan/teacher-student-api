@@ -1,14 +1,14 @@
-const { DataTypes } = require('sequelize');
-const sequelize = require('./index');
+const { DataTypes } = require("sequelize");
 
-const Teacher = sequelize.define('Teacher',{
-    email: {
+module.exports = (sequelize) =>
+  sequelize.define(
+    "Teacher",
+    {
+      email: {
         type: DataTypes.STRING,
         allowNull: false,
-        unique: true
-    }
-}, {
-    timestamps: false
-});
-
-module.exports = Teacher;
+        unique: true,
+      },
+    },
+    { timestamps: false }
+  );

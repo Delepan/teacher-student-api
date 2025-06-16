@@ -1,17 +1,19 @@
-const { DataTypes } = require('sequelize');
-const sequelize = require('./index');
+const { DataTypes } = require("sequelize");
 
-const Registration = sequelize.define('Registration', {
-    teacher_id: {
+module.exports = (sequelize) =>
+  sequelize.define(
+    "Registration",
+    {
+      teacher_id: {
         type: DataTypes.INTEGER,
-        allowNull: false
-    },  
-    student_id: {
+        allowNull: false,
+      },
+      student_id: {
         type: DataTypes.INTEGER,
-        allowNull: false
+        allowNull: false,
+      },
+    },
+    {
+      timestamps: false,
     }
-}, {
-    timestamps: false
-});
-
-module.exports = Registration;
+  );
